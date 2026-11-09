@@ -50,6 +50,9 @@ export default function Home() {
       <section className="home-panel">
         {latent && !active && <p className="note">Hoy tu mundo descansa en penumbra. Con la próxima misión vuelve a brillar.</p>}
         {!latent && <p className="greeting">{greeting}</p>}
+        {s.settings.testMode && (
+          <button type="button" className="note small test-pill" onClick={() => navigate('/ajustes')}>Modo prueba activo · misiones de 5 s</button>
+        )}
 
         <div className="stat">
           <span className="stat-label">Tiempo recuperado esta semana</span>

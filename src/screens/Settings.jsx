@@ -63,7 +63,7 @@ export default function Settings() {
 
       <section className="panel">
         <p className="panel-title">Pruebas</p>
-        <Toggle label="Modo prueba" hint={`Las misiones duran ${TEST_SECONDS} segundos, para ver crecer el mundo sin esperar.`} checked={st.testMode} onChange={(v) => updateSettings({ testMode: v })} />
+        <Toggle label={st.testMode ? 'Modo prueba: activado' : 'Modo prueba: desactivado'} hint={`Las misiones duran ${TEST_SECONDS} segundos, para ver crecer el mundo sin esperar. También acorta la que tengas en marcha.`} checked={st.testMode} onChange={(v) => updateSettings({ testMode: v })} />
       </section>
 
       <section className="panel">

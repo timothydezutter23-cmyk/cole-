@@ -394,7 +394,15 @@ export function finishOnboarding({ profile, skin }) {
 }
 
 export function updateSettings(patch) {
-  setState((s) => ({ settings: { ...s.settings, ...patch } }));
+  setState((s) => {
+    const next = { settings: { ...s.settings, ...patch } };
+    // Al activar el modo prueba, la misión que ya esté en marcha también se acorta.
+    if (patch.testMode && s.active) {
+      const soon = Date.now() + TEST_SECONDS * 1000;
+      if (s.active.endsAt > soon) next.active = { ...s.active, endsAt: soon, startedAt: Math.min(s.active.startedAt, soon - 1000) };
+    }
+    return next;
+  });
 }
 
 export const exportBackup = () => JSON.stringify({ app: 'offgrid', exportedAt: new Date().toISOString(), state }, null, 2);

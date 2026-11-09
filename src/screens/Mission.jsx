@@ -40,6 +40,7 @@ export function MissionPick() {
         <h1 className="display">{mission.title}</h1>
         <p className="lead">{mission.note}</p>
         <p className="muted small">Al volver: {Math.round(mission.minutes * LIGHT_PER_MIN)} de luz para tu mundo.</p>
+        {s.settings.testMode && <p className="note small">Modo prueba activo: esta misión durará {TEST_SECONDS} segundos.</p>}
       </section>
       <div className="stack">
         <Button onClick={accept}>Acepto</Button>

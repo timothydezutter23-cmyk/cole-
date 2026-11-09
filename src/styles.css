@@ -228,3 +228,4 @@ button { font: inherit; color: inherit; }
   .home-panel { padding-top: 24px; }
 }
 .backup { width: 100%; min-width: 0; font-family: var(--mono); font-size: 0.75rem; padding: 10px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--ink); resize: vertical; }
+.test-pill { border: 0; text-align: left; cursor: pointer; color: var(--ink); font: inherit; font-size: 0.85rem; }
