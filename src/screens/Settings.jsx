@@ -19,14 +19,15 @@ export default function Settings() {
   const [confirmReset, setConfirmReset] = useState(false);
   const fileRef = useRef(null);
 
-  const download = () => {
-    const blob = new Blob([exportBackup()], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `offgrid-copia-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    setMsg('Copia descargada.');
+  const [backup, setBackup] = useState(null);
+  const [paste, setPaste] = useState('');
+  const showBackup = () => { setBackup(exportBackup()); setMsg(null); };
+  const copyBackup = async () => {
+    try { await navigator.clipboard.writeText(backup); setMsg('Copia en el portapapeles. Guárdala donde quieras.'); }
+    catch { document.getElementById('backup-text')?.select(); setMsg('Selecciona el texto y cópialo a mano.'); }
+  };
+  const restorePaste = () => {
+    try { importBackup(paste); setPaste(''); setMsg('Copia restaurada.'); } catch (err) { setMsg(err.message || 'No se pudo leer la copia.'); }
   };
   const upload = async (e) => {
     const f = e.target.files?.[0];
@@ -70,9 +71,19 @@ export default function Settings() {
         <p className="muted small">Todo vive en este navegador. Nada sale de aquí. Si cambias de móvil o borras datos, usa una copia.</p>
         {!canStore() && <p className="note">Este navegador no deja guardar (¿modo privado?). Tu progreso se perderá al cerrar.</p>}
         <div className="row wrap">
-          <Button variant="ghost" onClick={download}>Exportar copia</Button>
-          <Button variant="ghost" onClick={() => fileRef.current?.click()}>Importar copia</Button>
-          <input ref={fileRef} type="file" accept="application/json" hidden onChange={upload} />
+          <Button variant="ghost" onClick={showBackup}>Exportar copia</Button>
+          <Button variant="ghost" onClick={() => fileRef.current?.click()}>Importar archivo</Button>
+          <input ref={fileRef} id="backup-file" type="file" accept="application/json,.json,.txt" hidden onChange={upload} />
+        </div>
+        {backup && (
+          <div className="stack">
+            <textarea id="backup-text" className="backup" readOnly value={backup} rows={5} aria-label="Copia de tus datos" onFocus={(e) => e.target.select()} />
+            <Button variant="ghost" onClick={copyBackup}>Copiar</Button>
+          </div>
+        )}
+        <div className="stack">
+          <textarea id="backup-paste" className="backup" rows={3} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="O pega aquí una copia para restaurarla" aria-label="Pegar copia" />
+          {paste.trim() && <Button variant="ghost" onClick={restorePaste}>Restaurar esta copia</Button>}
         </div>
         {!confirmReset ? (
           <button type="button" className="link small" onClick={() => setConfirmReset(true)}>Empezar de cero</button>

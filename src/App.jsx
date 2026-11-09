@@ -33,7 +33,7 @@ export default function App() {
 
   useEffect(() => {
     const root = document.documentElement;
-    root.dataset.theme = dark ? 'dark' : 'light';
+    root.classList.toggle('theme-dark', dark);
     root.classList.toggle('large-text', !!settings.largeText);
     root.classList.toggle('high-contrast', !!settings.highContrast);
     root.classList.toggle('reduce-motion', reduce);

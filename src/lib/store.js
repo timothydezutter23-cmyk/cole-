@@ -24,7 +24,7 @@ function defaultState() {
     onboarded: false,
     onboardedAt: null,
     profile: { hookApps: [], hookTimes: [], interests: [] },
-    settings: { theme: 'light', largeText: false, highContrast: false, reduceMotion: 'system', testMode: false },
+    settings: { theme: 'system', largeText: false, highContrast: false, reduceMotion: 'system', testMode: false },
     light: STARTER_LIGHT,
     skin: 'tierra',
     ownedSkins: ['tierra'],

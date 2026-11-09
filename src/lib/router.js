@@ -1,17 +1,23 @@
 import { useSyncExternalStore } from 'react';
 
-const getPath = () => (window.location.hash.replace(/^#/, '') || '/').split('?')[0];
+// Las rutas internas son '/mision/activa', pero en la dirección se guardan como
+// nombres simples (#mision-activa): funcionan igual en cualquier alojamiento.
+const toHash = (path) => path.replace(/^\//, '').replace(/\//g, '-');
+const getPath = () => {
+  const h = window.location.hash.replace(/^#\/?/, '').split('?')[0];
+  return h ? `/${h.replace(/-/g, '/')}` : '/';
+};
 
 export function useRoute() {
   return useSyncExternalStore((cb) => { window.addEventListener('hashchange', cb); return () => window.removeEventListener('hashchange', cb); }, getPath);
 }
 
 export function navigate(path, { replace = false } = {}) {
-  const url = `#${path}`;
+  const hash = toHash(path);
   if (replace) {
-    window.history.replaceState(null, '', url);
+    window.history.replaceState(null, '', hash ? `#${hash}` : window.location.pathname + window.location.search);
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   } else {
-    window.location.hash = path;
+    window.location.hash = hash;
   }
 }

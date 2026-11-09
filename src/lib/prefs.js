@@ -20,8 +20,23 @@ export function useReducedMotion() {
   return pref === 'system' ? system : !!pref;
 }
 
+// Tema elegido por el visor que aloja la página (si lo hay), vía data-theme.
+function useHostTheme() {
+  const read = () => document.documentElement.getAttribute('data-theme');
+  const [host, setHost] = useState(read);
+  useEffect(() => {
+    const mo = new MutationObserver(() => setHost(read()));
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => mo.disconnect();
+  }, []);
+  return host;
+}
+
 export function useDarkTheme() {
   const theme = useStore((s) => s.settings.theme);
   const system = useMedia('(prefers-color-scheme: dark)');
-  return theme === 'system' ? system : theme === 'dark';
+  const host = useHostTheme();
+  if (theme !== 'system') return theme === 'dark';
+  if (host === 'dark' || host === 'light') return host === 'dark';
+  return system;
 }
