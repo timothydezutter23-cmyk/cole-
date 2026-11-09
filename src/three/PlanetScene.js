@@ -116,7 +116,7 @@ export class PlanetScene {
     }
     setTerrainLook(this.terrainMat, palette, factors);
 
-    this.clouds.material.opacity = Math.min(1, factors.air * palette.clouds * 1.5) * (latent ? 0.6 : 1);
+    this.clouds.material.opacity = Math.min(1, factors.air * palette.clouds * 1.15) * (latent ? 0.6 : 1);
     this.clouds.visible = factors.air > 0.01;
     this.atmo.userData.uniforms.uStrength.value = 0.15 + factors.air * 0.85;
 

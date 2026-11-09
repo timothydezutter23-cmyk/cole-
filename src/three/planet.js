@@ -3,8 +3,8 @@
 import * as THREE from 'three';
 import { rawHeight, makeNoise3, groundFactor, RELIEF } from '../lib/terrain.js';
 
-const SEG_W = 220;
-const SEG_H = 150;
+const SEG_W = 320;
+const SEG_H = 200;
 // Mapa de alturas en alta resolución: el color se calcula por píxel a partir
 // de él, así las costas salen curvas y limpias en vez de en escalera.
 const MAP_W = 768;
@@ -131,6 +131,22 @@ function cloudMap() {
 }
 
 const GLSL_EQUIRECT = /* glsl */ `
+// Muestreo bicúbico (B-spline) con 4 lecturas: sin bloques ni escalones.
+vec4 cubicW(float v) {
+  vec4 n = vec4(1.0, 2.0, 3.0, 4.0) - v; vec4 s = n * n * n;
+  float x = s.x; float y = s.y - 4.0 * s.x; float z = s.z - 4.0 * s.y + 6.0 * s.x; float w = 6.0 - x - y - z;
+  return vec4(x, y, z, w) * (1.0 / 6.0);
+}
+vec4 bicubic(sampler2D tex, vec2 uv, vec2 size) {
+  vec2 inv = 1.0 / size; uv = uv * size - 0.5; vec2 f = fract(uv); uv -= f;
+  vec4 xc = cubicW(f.x); vec4 yc = cubicW(f.y);
+  vec4 c = uv.xxyy + vec2(-0.5, 1.5).xyxy;
+  vec4 s = vec4(xc.xz + xc.yw, yc.xz + yc.yw);
+  vec4 o = (c + vec4(xc.yw, yc.yw) / s) * inv.xxyy;
+  vec4 s0 = texture2D(tex, o.xz), s1 = texture2D(tex, o.yz), s2 = texture2D(tex, o.xw), s3 = texture2D(tex, o.yw);
+  float sx = s.x / (s.x + s.y); float sy = s.z / (s.z + s.w);
+  return mix(mix(s3, s2, sx), mix(s1, s0, sx), sy);
+}
 vec2 equirect(vec3 d) { return vec2(atan(d.z, d.x) / 6.2831853 + 0.5, asin(clamp(d.y, -1.0, 1.0)) / 3.1415927 + 0.5); }
 vec3 rotY(vec3 d, float a) { float c = cos(a), s = sin(a); return vec3(c * d.x - s * d.z, d.y, s * d.x + c * d.z); }
 `;
@@ -155,7 +171,7 @@ float vnoise(vec3 x) {
 // Altura sobre el nivel del mar (sin unidades) con detalle fino por píxel.
 float heightAt(vec3 d) {
   float fine = (vnoise(d * 48.0) - 0.5) * 0.022 + (vnoise(d * 140.0) - 0.5) * 0.009;
-  return texture2D(uHeight, equirect(d)).r - (0.23 + uSea) + fine;
+  return bicubic(uHeight, equirect(d), vec2(${MAP_W}.0, ${MAP_H}.0)).r - (0.23 + uSea) + fine;
 }
 // Elevación real (fracción del radio), igual que el relieve de la malla.
 float elevAt(vec3 d) { float h = heightAt(d); return h > 0.0 ? pow(h, 1.25) * uRelief : 0.0; }
@@ -163,7 +179,7 @@ float elevAt(vec3 d) { float h = heightAt(d); return h > 0.0 ? pow(h, 1.25) * uR
 
 const GLSL_COLOR = /* glsl */ `
   vec3 d = normalize(vDir);
-  vec2 hv = texture2D(uHeight, equirect(d)).rg;
+  vec2 hv = bicubic(uHeight, equirect(d), vec2(${MAP_W}.0, ${MAP_H}.0)).rg;
   float h = heightAt(d);
   float v = hv.g;
   float lat = abs(d.y);
@@ -285,9 +301,20 @@ function cloudLayer(radius, rot, color, opacity) {
       .replace('#include <common>', '#include <common>\nvarying vec3 vDir;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvDir = position;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform sampler2D uClouds;\nuniform float uCloudRot;\nvarying vec3 vDir;\n${GLSL_EQUIRECT}`)
+      .replace('#include <common>', `#include <common>\nuniform sampler2D uClouds;\nuniform float uCloudRot;\nvarying vec3 vDir;\n${GLSL_EQUIRECT}
+float chash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float cnoise(vec3 x) {
+  vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(chash(i), chash(i + vec3(1,0,0)), f.x), mix(chash(i + vec3(0,1,0)), chash(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(chash(i + vec3(0,0,1)), chash(i + vec3(1,0,1)), f.x), mix(chash(i + vec3(0,1,1)), chash(i + vec3(1,1,1)), f.x), f.y), f.z);
+}`)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );',
-        'float ca = texture2D(uClouds, equirect(rotY(normalize(vDir), uCloudRot))).r;\nvec4 diffuseColor = vec4(diffuse, opacity * ca);');
+        `vec3 cd = rotY(normalize(vDir), uCloudRot);
+         float ca = bicubic(uClouds, equirect(cd), vec2(${CLOUD_W}.0, ${CLOUD_H}.0)).r;
+         // Detalle fino por píxel para que el borde de la nube sea nítido de cerca.
+         float cdet = (cnoise(cd * 70.0) - 0.5) * 0.5 + (cnoise(cd * 190.0) - 0.5) * 0.25;
+         ca = smoothstep(0.18, 0.9, ca + cdet * ca * (1.0 - ca) * 2.0);
+         vec4 diffuseColor = vec4(diffuse, opacity * ca);`);
   };
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 128, 80), mat);
   return mesh;
