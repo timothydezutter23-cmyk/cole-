@@ -6,9 +6,9 @@ export const SKINS = [
     id: 'tierra', name: 'Tierra viva', price: 0, starter: true,
     desc: 'Océanos, bosques y cumbres nevadas.',
     palette: {
-      deep: '#0d2c4a', shallow: '#2a7f9e', foam: '#8fd0d8', sand: '#d8c9a0', grass: '#6f9a4a',
-      forest: '#3d6b35', dry: '#b59a63', rock: '#7a6f64', snow: '#f2f4f5', ice: '#e6eef2',
-      atmosphere: '#8fc4ff', sea: 0.0, dryBand: 0.25, clouds: 0.55,
+      deep: '#06203d', shallow: '#1d6b8a', foam: '#9cc9d0', sand: '#cdb88c', grass: '#5f7d3a',
+      forest: '#2e4a26', dry: '#a88d5e', rock: '#6a6058', snow: '#f4f6f8', ice: '#e8eef3',
+      atmosphere: '#6fa8ff', sea: 0.0, dryBand: 0.25, clouds: 0.55,
     },
   },
   {

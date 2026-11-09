@@ -40,10 +40,15 @@ export class PlanetScene {
     this.camera = new THREE.PerspectiveCamera(35, 1, 0.05, 200);
     this.camera.position.set(0, 0, distance);
 
-    this.sun = new THREE.DirectionalLight('#fff4e3', 2.4);
-    this.sun.position.set(-4, 3, 5);
-    this.hemi = new THREE.HemisphereLight('#dfe9ff', '#2a2420', 0.55);
-    this.ambient = new THREE.AmbientLight('#ffffff', 0.12);
+    // Sol desde la izquierda y algo por delante: se ve el día, el atardecer y
+    // una franja de noche en el borde derecho, como en una foto desde el espacio.
+    this.sunDir = new THREE.Vector3(-0.78, 0.32, 0.54).normalize();
+    this.sun = new THREE.DirectionalLight('#fff6ea', 3.0);
+    this.sun.position.copy(this.sunDir).multiplyScalar(10);
+    this.hemi = new THREE.HemisphereLight('#c9d8ff', '#1a1612', 0.12);
+    this.ambient = new THREE.AmbientLight('#8fa3c8', 0.05);
+    this.cloudRot = { value: 0 };
+    this.fogRot = { value: 1.7 };
     this.scene.add(this.sun, this.hemi, this.ambient);
 
     this.planet = new THREE.Group();
@@ -97,12 +102,13 @@ export class PlanetScene {
 
     if (skinId !== prevSkin) {
       if (this.terrain) { this.planet.remove(this.terrain); this.terrain.geometry.dispose(); }
-      if (!this.terrainMat) this.terrainMat = terrainMaterial();
+      if (!this.terrainMat) this.terrainMat = terrainMaterial(this.cloudRot);
       this.terrain = new THREE.Mesh(buildTerrain(palette), this.terrainMat);
       this.planet.add(this.terrain);
-      if (!this.clouds) { this.clouds = buildClouds(); this.planet.add(this.clouds); }
+      if (!this.clouds) { this.clouds = buildClouds(this.cloudRot); this.planet.add(this.clouds); }
       if (this.atmo) this.scene.remove(this.atmo);
       this.atmo = buildAtmosphere(palette.atmosphere);
+      this.atmo.userData.uniforms.uSun.value.copy(this.sunDir);
       this.scene.add(this.atmo);
       this.palette = palette;
       // Las piezas se reapoyan sobre el nuevo relieve.
@@ -110,9 +116,9 @@ export class PlanetScene {
     }
     setTerrainLook(this.terrainMat, palette, factors);
 
-    this.clouds.material.opacity = factors.air * palette.clouds * 0.7 * (latent ? 0.6 : 1);
+    this.clouds.material.opacity = Math.min(1, factors.air * palette.clouds * 1.5) * (latent ? 0.6 : 1);
     this.clouds.visible = factors.air > 0.01;
-    this.atmo.material.uniforms.uStrength.value = 0.15 + factors.air * 0.85;
+    this.atmo.userData.uniforms.uStrength.value = 0.15 + factors.air * 0.85;
 
     // Mejoras
     const wantRings = boosts.includes('anillos');
@@ -133,15 +139,16 @@ export class PlanetScene {
     if (wantRain && !this.rain) { this.rain = buildRain(); this.planet.add(this.rain); }
     if (this.rain) this.rain.visible = wantRain;
     const wantFog = climateId === 'niebla' || latent;
-    if (wantFog && !this.fog) { this.fog = buildFog(); this.planet.add(this.fog); }
+    if (wantFog && !this.fog) { this.fog = buildFog(this.fogRot); this.planet.add(this.fog); }
     if (this.fog) this.fog.visible = wantFog;
 
     // Penumbra y noche: solo cambia la luz, nunca lo construido.
     const dim = (latent ? 0.72 : 1) * (night ? 0.7 : 1) * (0.35 + 0.65 * factors.color);
-    this.sun.intensity = 2.4 * dim;
-    this.sun.color.set(night ? '#c9d6ff' : '#fff4e3');
-    this.hemi.intensity = 0.55 * dim;
-    this.ambient.intensity = night ? 0.18 : 0.12;
+    this.sun.intensity = 3.0 * dim;
+    this.sun.color.set(night ? '#d6defa' : '#fff6ea');
+    this.hemi.intensity = 0.12 * dim + (night ? 0.06 : 0);
+    // Ambiente bajo: el lado de noche queda oscuro pero se intuye.
+    this.ambient.intensity = 0.05 + (1 - factors.color) * 0.15;
   }
 
   // ---------- Piezas ----------
@@ -321,8 +328,8 @@ export class PlanetScene {
       this.planet.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, dt * 0.05));
     }
     if (!calm) {
-      if (this.clouds) this.clouds.rotation.y += dt * 0.01;
-      if (this.fog?.visible) this.fog.rotation.y -= dt * 0.015;
+      this.cloudRot.value += dt * 0.008;
+      if (this.fog?.visible) this.fogRot.value -= dt * 0.012;
       if (this.rain?.visible) this.rain.userData.tick(dt);
       if (this.aurora?.visible) this.aurora.userData.material.uniforms.uTime.value = t;
       if (this.rings) this.rings.rotation.z += dt * 0.02;

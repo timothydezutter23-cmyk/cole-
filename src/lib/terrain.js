@@ -109,7 +109,7 @@ export function isLand(dir, palette) {
   return heightAt(dir, palette.sea) > 0.005;
 }
 
-export const RELIEF = 0.06; // altura máxima de montaña como fracción del radio
+export const RELIEF = 0.03; // altura máxima de montaña como fracción del radio
 export const WATER_LEVEL = 1.0; // la superficie del mar está en r = R
 
 // Radio relativo (1 = nivel del mar) del suelo en esa dirección.
