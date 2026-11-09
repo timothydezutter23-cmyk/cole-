@@ -1,13 +1,19 @@
 // Construcción del planeta: relieve, colores por altura/latitud/pendiente,
-// océano, nubes y atmósfera. Todo procedural, sin modelos externos.
+// mar, nubes y atmósfera. Todo procedural, sin modelos externos.
 import * as THREE from 'three';
 import { rawHeight, makeNoise3, groundFactor } from '../lib/terrain.js';
 
-const SEG_W = 200;
-const SEG_H = 140;
+const SEG_W = 220;
+const SEG_H = 150;
+// Mapa de alturas en alta resolución: el color se calcula por píxel a partir
+// de él, así las costas salen curvas y limpias en vez de en escalera.
+const MAP_W = 768;
+const MAP_H = 384;
 
 let baseCache = null;
+let mapCache = null;
 const tint = makeNoise3(4242);
+const variationAt = (x, y, z) => tint(x * 4.1, y * 4.1, z * 4.1) * 0.6 + tint(x * 13, y * 13, z * 13) * 0.4;
 
 // Las alturas solo dependen de la dirección: se calculan una vez.
 function base() {
@@ -23,17 +29,39 @@ function base() {
     const l = Math.hypot(x, y, z) || 1;
     dirs[i * 3] = x / l; dirs[i * 3 + 1] = y / l; dirs[i * 3 + 2] = z / l;
     raw[i] = rawHeight(x / l, y / l, z / l);
-    variation[i] = tint(x * 4.1, y * 4.1, z * 4.1) * 0.6 + tint(x * 13, y * 13, z * 13) * 0.4;
+    variation[i] = variationAt(x / l, y / l, z / l);
   }
   baseCache = { geo, dirs, raw, variation, n };
   return baseCache;
 }
 
-const c = (hex) => new THREE.Color(hex);
-const DEAD = c('#19191b');
-const DEAD_HI = c('#2a2928');
-const BARE_ROCK = c('#6e655c');
-const BARE_DRY = c('#8e7c63');
+// Textura equirectangular (R = altura, G = variación) en media precisión,
+// que la GPU puede interpolar suavemente.
+function heightMap() {
+  if (mapCache) return mapCache;
+  const data = new Uint16Array(MAP_W * MAP_H * 4);
+  for (let y = 0; y < MAP_H; y++) {
+    const lat = ((y + 0.5) / MAP_H - 0.5) * Math.PI;
+    const cl = Math.cos(lat), sl = Math.sin(lat);
+    for (let x = 0; x < MAP_W; x++) {
+      const lon = ((x + 0.5) / MAP_W - 0.5) * Math.PI * 2;
+      const dx = cl * Math.cos(lon), dz = cl * Math.sin(lon);
+      const i = (y * MAP_W + x) * 4;
+      data[i] = THREE.DataUtils.toHalfFloat(rawHeight(dx, sl, dz));
+      data[i + 1] = THREE.DataUtils.toHalfFloat(variationAt(dx, sl, dz));
+      data[i + 3] = THREE.DataUtils.toHalfFloat(1);
+    }
+  }
+  const tex = new THREE.DataTexture(data, MAP_W, MAP_H, THREE.RGBAFormat, THREE.HalfFloatType);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  mapCache = tex;
+  return tex;
+}
 
 function smooth(a, b, v) {
   const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
@@ -44,7 +72,6 @@ export function buildTerrain(palette) {
   const { geo: src, dirs, raw, variation, n } = base();
   const geo = src.clone();
   const pos = geo.attributes.position;
-  const heights = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     let h = raw[i] - (0.23 + palette.sea);
     const lat = Math.abs(dirs[i * 3 + 1]);
@@ -54,77 +81,126 @@ export function buildTerrain(palette) {
       const k = smooth(capStart, capStart + 0.05, lat);
       h = h * (1 - k) + Math.max(h, 0.003 + (lat - capStart) * 0.12) * k;
     }
-    heights[i] = h;
     const r = groundFactor(h);
     pos.setXYZ(i, dirs[i * 3] * r, dirs[i * 3 + 1] * r, dirs[i * 3 + 2] * r);
   }
   geo.computeVertexNormals();
-  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
-  geo.userData.heights = heights;
+  // Pendiente por vértice (para la roca en laderas).
+  const normals = geo.attributes.normal;
+  const slope = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    slope[i] = 1 - (normals.getX(i) * dirs[i * 3] + normals.getY(i) * dirs[i * 3 + 1] + normals.getZ(i) * dirs[i * 3 + 2]);
+  }
+  geo.setAttribute('aSlope', new THREE.BufferAttribute(slope, 1));
   return geo;
 }
 
-// Pinta los colores según la piel y los factores del mundo (color, agua, aire, vida).
-export function paintTerrain(geo, palette, factors) {
-  const { dirs, variation, n } = base();
-  const heights = geo.userData.heights;
-  const normals = geo.attributes.normal;
-  const col = geo.attributes.color;
-  const P = {};
-  for (const k of ['deep', 'shallow', 'sand', 'grass', 'forest', 'dry', 'rock', 'snow', 'ice']) P[k] = c(palette[k]);
-  const full = new THREE.Color();
-  const bare = new THREE.Color();
-  const out = new THREE.Color();
-  const tmp = new THREE.Color();
-  const capBase = palette.cold ? 0.72 : 0.86;
-  for (let i = 0; i < n; i++) {
-    const h = heights[i];
-    const dx = dirs[i * 3], dy = dirs[i * 3 + 1], dz = dirs[i * 3 + 2];
-    const lat = Math.abs(dy);
-    const v = variation[i];
-    const slope = 1 - (normals.getX(i) * dx + normals.getY(i) * dy + normals.getZ(i) * dz);
+const c = (hex) => new THREE.Color(hex);
 
-    if (h <= 0) {
-      // Fondo marino: turquesa cerca de la costa, oscuro en lo profundo.
-      full.copy(P.shallow).lerp(P.deep, smooth(0, 0.28, -h));
-      bare.copy(BARE_ROCK).multiplyScalar(0.55 - Math.min(0.3, -h));
-      // Sin agua todavía, la cuenca es roca; con agua, fondo de color.
-      tmp.copy(bare).lerp(full, factors.water);
-      full.copy(tmp);
-      bare.copy(BARE_ROCK).multiplyScalar(0.5);
-    } else {
-      const elev = h;
-      const snowLine = (palette.cold ? 0.45 : 0.78) - v * 0.08;
-      // Banda seca alrededor del ecuador según la piel.
-      const dryness = smooth(0.15, -0.05, lat - palette.dryBand * 0.55 + v * 0.18);
-      const forestness = smooth(-0.1, 0.35, v + elev * 0.6);
-      // Color pleno (con vida)
-      full.copy(P.grass).lerp(P.forest, forestness);
-      full.lerp(P.dry, dryness);
-      full.lerp(P.sand, smooth(0.035, 0.0, elev));
-      full.lerp(P.rock, Math.max(smooth(0.5, 0.72, elev), smooth(0.05, 0.13, slope)));
-      full.lerp(P.snow, smooth(snowLine, snowLine + 0.08, elev));
-      // Color desnudo (roca y tierra seca, antes de la vida)
-      bare.copy(BARE_DRY).lerp(P.dry, 0.35 * dryness).lerp(BARE_ROCK, Math.max(smooth(0.25, 0.6, elev), smooth(0.04, 0.12, slope)));
-      bare.lerp(P.sand, smooth(0.03, 0.0, elev) * 0.6);
-      bare.lerp(P.snow, smooth(snowLine, snowLine + 0.08, elev) * factors.air);
-      tmp.copy(bare).lerp(full, factors.life);
-      full.copy(tmp);
-      bare.copy(BARE_ROCK);
-    }
-    const capStart = capBase + v * 0.06;
-    if (lat > capStart) full.lerp(P.ice, smooth(capStart, capStart + 0.04, lat) * Math.max(factors.water, 0.4));
+const PAL_KEYS = ['deep', 'shallow', 'foam', 'sand', 'grass', 'forest', 'dry', 'rock', 'snow', 'ice'];
 
-    // Mundo apagado → color.
-    const shade = 1 + v * 0.08;
-    out.copy(DEAD).lerp(DEAD_HI, Math.max(0, h) * 1.5).lerp(full, factors.color).multiplyScalar(shade);
-    col.setXYZ(i, out.r, out.g, out.b);
+const GLSL_COMMON = /* glsl */ `
+uniform sampler2D uHeight;
+uniform float uSea, uDryBand, uCapBase, uSnowBase;
+uniform vec4 uFactors; // color, water, air, life
+${PAL_KEYS.map((k) => `uniform vec3 uC_${k};`).join('\n')}
+varying vec3 vDir;
+varying float vSlope;
+float sm(float a, float b, float v) { float t = clamp((v - a) / (b - a), 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
+float hash3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float vnoise(vec3 x) {
+  vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x), mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x), mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+`;
+
+const GLSL_COLOR = /* glsl */ `
+  vec3 d = normalize(vDir);
+  vec2 huv = vec2(atan(d.z, d.x) / 6.2831853 + 0.5, asin(clamp(d.y, -1.0, 1.0)) / 3.1415927 + 0.5);
+  vec2 hv = texture2D(uHeight, huv).rg;
+  // Detalle fino por píxel: rompe la interpolación y da textura al suelo.
+  float fine = (vnoise(d * 48.0) - 0.5) * 0.022 + (vnoise(d * 140.0) - 0.5) * 0.009;
+  float h = hv.r - (0.23 + uSea) + fine;
+  float v = hv.g;
+  float lat = abs(d.y);
+  float capStart = uCapBase + v * 0.06;
+  float capK = sm(capStart, capStart + 0.05, lat);
+  h = mix(h, max(h, 0.003 + (lat - capStart) * 0.12), capK);
+  float grain = vnoise(d * 220.0) - 0.5;
+
+  vec3 bareRock = vec3(0.157, 0.133, 0.110);
+  vec3 bareDry = vec3(0.271, 0.208, 0.125);
+  vec3 col;
+  float waterMask = 0.0;
+  // El mar sube con el factor de agua: primero cuencas secas, luego mares llenos.
+  float waterLine = mix(-0.3, 0.0, uFactors.y);
+  if (h < waterLine && uFactors.y > 0.001) {
+    float depth = waterLine - h;
+    col = mix(uC_shallow, uC_deep, sm(0.0, 0.22, depth));
+    col = mix(col, uC_foam, (1.0 - sm(0.0, 0.012, depth)) * 0.55);
+    waterMask = 1.0;
+  } else if (h <= 0.0) {
+    // Cuenca seca (antes del agua) o fondo recién descubierto.
+    col = mix(bareRock * 0.9, bareRock * 0.45, sm(0.0, 0.3, -h));
+  } else {
+    float snowLine = uSnowBase - v * 0.08;
+    float dryness = sm(0.15, -0.05, lat - uDryBand * 0.55 + v * 0.18);
+    float forestness = sm(-0.1, 0.35, v + h * 0.6 + grain * 0.15);
+    float slopeRock = sm(0.05, 0.13, vSlope);
+    vec3 full = mix(uC_grass, uC_forest, forestness);
+    full = mix(full, uC_dry, dryness);
+    full = mix(full, uC_sand, sm(0.03, 0.0, h));
+    full = mix(full, uC_rock, max(sm(0.5, 0.72, h), slopeRock));
+    full = mix(full, uC_snow, sm(snowLine, snowLine + 0.06, h));
+    vec3 bare = mix(bareDry, uC_dry, 0.35 * dryness);
+    bare = mix(bare, bareRock, max(sm(0.25, 0.6, h), sm(0.04, 0.12, vSlope)));
+    bare = mix(bare, uC_sand, sm(0.03, 0.0, h) * 0.6);
+    bare = mix(bare, uC_snow, sm(snowLine, snowLine + 0.06, h) * uFactors.z);
+    col = mix(bare, full, uFactors.w);
   }
-  col.needsUpdate = true;
+  col = mix(col, uC_ice, sm(capStart, capStart + 0.04, lat) * max(uFactors.y, 0.4));
+  if (waterMask < 0.5) col *= 1.0 + grain * 0.12 + v * 0.08;
+  // Mundo apagado: casi negro, con un poco de relieve.
+  vec3 dead = mix(vec3(0.0098, 0.0098, 0.0116), vec3(0.023, 0.022, 0.021), clamp(max(h, 0.0) * 1.5, 0.0, 1.0));
+  col = mix(dead, col, uFactors.x);
+  vec4 diffuseColor = vec4(col, opacity);
+`;
+
+// Material del terreno: iluminación estándar, color calculado por píxel.
+export function terrainMaterial(palette) {
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 });
+  const uniforms = {
+    uHeight: { value: heightMap() },
+    uSea: { value: 0 }, uDryBand: { value: 0 }, uCapBase: { value: 0.86 }, uSnowBase: { value: 0.78 },
+    uFactors: { value: new THREE.Vector4(0, 0, 0, 0) },
+  };
+  PAL_KEYS.forEach((k) => { uniforms[`uC_${k}`] = { value: new THREE.Color() }; });
+  mat.userData.uniforms = uniforms;
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aSlope;\nvarying vec3 vDir;\nvarying float vSlope;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvDir = position;\nvSlope = aSlope;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${GLSL_COMMON}`)
+      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', GLSL_COLOR)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.32, waterMask);');
+  };
+  if (palette) setTerrainLook(mat, palette, { color: 0, water: 0, air: 0, life: 0 });
+  return mat;
 }
 
-export function terrainMaterial() {
-  return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, flatShading: false });
+// Ajusta piel y etapa del mundo sin reconstruir nada.
+export function setTerrainLook(mat, palette, factors) {
+  const u = mat.userData.uniforms;
+  // Los colores de la piel están en sRGB; el shader trabaja en lineal.
+  PAL_KEYS.forEach((k) => u[`uC_${k}`].value.set(palette[k]));
+  u.uSea.value = palette.sea;
+  u.uDryBand.value = palette.dryBand;
+  u.uCapBase.value = palette.cold ? 0.72 : 0.86;
+  u.uSnowBase.value = palette.cold ? 0.45 : 0.78;
+  u.uFactors.value.set(factors.color, factors.water, factors.air, factors.life);
 }
 
 export function buildOcean(palette) {

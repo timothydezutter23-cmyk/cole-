@@ -114,6 +114,6 @@ export const WATER_LEVEL = 1.0; // la superficie del mar está en r = R
 
 // Radio relativo (1 = nivel del mar) del suelo en esa dirección.
 export function groundFactor(h) {
-  if (h <= 0) return 1 + h * 0.03; // fondo marino ligeramente hundido
+  if (h <= 0) return 1; // el mar es una superficie lisa a nivel 1
   return 1 + Math.pow(h, 1.25) * RELIEF;
 }

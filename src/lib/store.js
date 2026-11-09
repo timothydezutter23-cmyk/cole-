@@ -320,9 +320,10 @@ export function selectSkin(skinId) {
 
 export function canPlaceAt(itemId, dir, skinId = state.skin) {
   const it = itemById(itemId);
-  const land = heightAt(dir, skinById(skinId).palette.sea) > 0.005;
-  if (it.place === 'water') return !land;
-  if (it.place === 'land') return land;
+  // Un pequeño margen en la orilla para que nada quede a medias entre tierra y mar.
+  const h = heightAt(dir, skinById(skinId).palette.sea);
+  if (it.place === 'water') return h < -0.015;
+  if (it.place === 'land') return h > 0.015;
   return true;
 }
 

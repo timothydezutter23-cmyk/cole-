@@ -4,7 +4,7 @@ import { skinById } from '../data/shop.js';
 import { itemById } from '../data/shop.js';
 import { heightAt, groundFactor } from '../lib/terrain.js';
 import {
-  buildTerrain, paintTerrain, terrainMaterial, buildOcean, buildClouds, buildAtmosphere,
+  buildTerrain, terrainMaterial, setTerrainLook, buildClouds, buildAtmosphere,
   buildStars, buildRings, buildAurora, buildRain, buildFog,
 } from './planet.js';
 import { buildItem, makeGhost } from './items.js';
@@ -97,11 +97,9 @@ export class PlanetScene {
 
     if (skinId !== prevSkin) {
       if (this.terrain) { this.planet.remove(this.terrain); this.terrain.geometry.dispose(); }
-      this.terrain = new THREE.Mesh(buildTerrain(palette), terrainMaterial());
+      if (!this.terrainMat) this.terrainMat = terrainMaterial();
+      this.terrain = new THREE.Mesh(buildTerrain(palette), this.terrainMat);
       this.planet.add(this.terrain);
-      if (this.ocean) this.planet.remove(this.ocean);
-      this.ocean = buildOcean(palette);
-      this.planet.add(this.ocean);
       if (!this.clouds) { this.clouds = buildClouds(); this.planet.add(this.clouds); }
       if (this.atmo) this.scene.remove(this.atmo);
       this.atmo = buildAtmosphere(palette.atmosphere);
@@ -110,11 +108,8 @@ export class PlanetScene {
       // Las piezas se reapoyan sobre el nuevo relieve.
       this.objects.forEach((g, uid) => this._positionObject(g, g.userData.placed));
     }
-    paintTerrain(this.terrain.geometry, palette, factors);
+    setTerrainLook(this.terrainMat, palette, factors);
 
-    this.ocean.visible = factors.water > 0.01;
-    this.ocean.scale.setScalar(0.975 + 0.025 * factors.water);
-    this.ocean.material.opacity = 0.35 + 0.3 * factors.water;
     this.clouds.material.opacity = factors.air * palette.clouds * 0.7 * (latent ? 0.6 : 1);
     this.clouds.visible = factors.air > 0.01;
     this.atmo.material.uniforms.uStrength.value = 0.15 + factors.air * 0.85;
