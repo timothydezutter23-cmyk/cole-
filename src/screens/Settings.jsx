@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Button, Chip, TopBar } from '../components/ui.jsx';
 import { navigate } from '../lib/router.js';
+import { useInstall, isStandalone, isIOS, canBeInstalled } from '../lib/install.js';
 import { useStore, updateSettings, exportBackup, importBackup, resetAll, canStore, TEST_SECONDS } from '../lib/store.js';
 
 function Toggle({ label, hint, checked, onChange }) {
@@ -18,6 +19,8 @@ export default function Settings() {
   const [msg, setMsg] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const fileRef = useRef(null);
+  const install = useInstall();
+  const site = 'https://timothydezutter23-cmyk.github.io/cole-/';
 
   const [backup, setBackup] = useState(null);
   const [paste, setPaste] = useState('');
@@ -39,6 +42,24 @@ export default function Settings() {
   return (
     <main className="screen">
       <TopBar title="Ajustes" right={<span />} />
+
+      <section className="panel">
+        <p className="panel-title">Tener Offgrid en el móvil</p>
+        {isStandalone() ? (
+          <p className="muted small">Ya la tienes instalada. Funciona también sin conexión.</p>
+        ) : !canBeInstalled() ? (
+          <>
+            <p className="muted small">Desde aquí no se puede instalar. Abre la web de Offgrid en el navegador del móvil y añádela a la pantalla de inicio:</p>
+            <p className="mono small selectable">{site}</p>
+          </>
+        ) : install.available ? (
+          <Button variant="ghost" onClick={install.prompt}>Instalar Offgrid</Button>
+        ) : isIOS() ? (
+          <p className="muted small">En Safari, toca Compartir y luego «Añadir a pantalla de inicio».</p>
+        ) : (
+          <p className="muted small">Abre el menú del navegador y elige «Instalar app» o «Añadir a pantalla de inicio».</p>
+        )}
+      </section>
 
       <section className="panel">
         <p className="panel-title">Aspecto</p>

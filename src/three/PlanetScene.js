@@ -7,7 +7,7 @@ import {
   buildTerrain, terrainMaterial, setTerrainLook, buildClouds, buildAtmosphere,
   buildStars, buildRings, buildAurora, buildRain, buildFog,
 } from './planet.js';
-import { buildItem, makeGhost } from './items.js';
+import { buildItem, makeGhost, setNightLights, seedFrom } from './items.js';
 
 export const ITEM_SCALE = 0.045; // altura de una pieza como fracción del radio del planeta
 const UP = new THREE.Vector3(0, 1, 0);
@@ -170,7 +170,7 @@ export class PlanetScene {
       let g = this.objects.get(p.uid);
       const prev = g?.userData.placed;
       if (!g) {
-        g = buildItem(p.itemId);
+        g = buildItem(p.itemId, seedFrom(p.uid));
         g.userData.uid = p.uid;
         this.objects.set(p.uid, g);
         this.objectLayer.add(g);
@@ -334,6 +334,20 @@ export class PlanetScene {
       if (this.aurora?.visible) this.aurora.userData.material.uniforms.uTime.value = t;
       if (this.rings) this.rings.rotation.z += dt * 0.02;
       this.objects.forEach((g) => g.userData.tick && g.userData.tick(t));
+    }
+    // Luces de noche: cada pieza se enciende cuando su lado del planeta queda a oscuras.
+    if (this.objects.size || this.ghost) {
+      const v = this._tmpV || (this._tmpV = new THREE.Vector3());
+      const lightFor = (g) => {
+        g.getWorldPosition(v).normalize();
+        const sd = v.dot(this.sunDir);
+        const night = Math.max(0, Math.min(1, (0.25 - sd) / 0.45));
+        setNightLights(g, Math.max(night, this.world?.night ? 0.6 : 0));
+      };
+      this.objects.forEach(lightFor);
+      if (this.ghost) lightFor(this.ghost);
+    }
+    if (!calm) {
       if (this.ghost?.userData.tick) this.ghost.userData.tick(t);
     }
     this.renderer.render(this.scene, this.camera);
@@ -394,7 +408,8 @@ export class ItemPreview {
     );
     base.position.y = -0.04;
     this.stage.add(base);
-    this.item = buildItem(itemId);
+    this.item = buildItem(itemId, 7);
+    setNightLights(this.item, 0.55);
     const s = water ? 0.85 : 1;
     this.item.scale.setScalar(s);
     this.stage.add(this.item);

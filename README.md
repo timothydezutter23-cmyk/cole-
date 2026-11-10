@@ -24,6 +24,15 @@ que pasas lejos del móvil en luz para un planeta 3D que construyes a tu gusto.
 - **Modo antojo**: respirar 1 minuto, micro-misión o esperar 10 minutos con el planeta de fondo.
 - **Ajustes**: tema claro/oscuro, texto grande, contraste alto, reducir movimiento (respeta el del sistema), modo prueba (misiones de 5 s), exportar/importar copia.
 
+## Instalarla en el móvil
+
+La web se publica en GitHub Pages con `.github/workflows/pages.yml` cada vez que
+hay cambios en `main`. Una vez abierta en el navegador del móvil se puede añadir
+a la pantalla de inicio (Android: «Instalar app»; iPhone: Compartir → «Añadir a
+pantalla de inicio»). Funciona sin conexión gracias a `public/sw.js`.
+
+Para activarlo la primera vez: en GitHub, *Settings → Pages → Source: GitHub Actions*.
+
 ## Desarrollo
 
 ```bash
