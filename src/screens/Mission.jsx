@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Button, Icon, TopBar } from '../components/ui.jsx';
+import { Button, Chip, Icon, TopBar } from '../components/ui.jsx';
 import { navigate } from '../lib/router.js';
 import {
   useStore, currentSuggestion, changeSuggestion, postponeSuggestion, startMission, cancelMission, completeMission,
   changesLeft, missionById, setFeeling, LIGHT_PER_MIN, TEST_SECONDS,
+  addCustomMission, removeCustomMission, CUSTOM_MAX_MINUTES,
 } from '../lib/store.js';
 import { CATEGORIES } from '../data/missions.js';
 import { itemById } from '../data/shop.js';
@@ -39,6 +40,7 @@ export function MissionPick() {
         <p className="eyebrow cat" data-cat={mission.category}>{cat.label} · {mission.minutes} min</p>
         <h1 className="display">{mission.title}</h1>
         <p className="lead">{mission.note}</p>
+        {mission.custom && <p className="tag">Propuesta por ti</p>}
         <p className="muted small">Al volver: {Math.round(mission.minutes * LIGHT_PER_MIN)} de luz para tu mundo.</p>
         {s.settings.testMode && <p className="note small">Modo prueba activo: esta misión durará {TEST_SECONDS} segundos.</p>}
       </section>
@@ -49,7 +51,99 @@ export function MissionPick() {
           <Button variant="ghost" onClick={postpone}>Para luego</Button>
         </div>
         {leftMsg && <p className="muted small center">{leftMsg}</p>}
+        <button type="button" className="link" onClick={() => navigate('/mision/nueva')}><Icon name="spark" size={16} /> Proponer una misión</button>
       </div>
+    </main>
+  );
+}
+
+const MINUTE_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90];
+const SLOT_OPTIONS = [['cualquiera', 'Cuando sea'], ['manana', 'Mañana'], ['mediodia', 'Mediodía'], ['tarde', 'Tarde'], ['noche', 'Noche']];
+
+// Proponer misiones propias: luego salen entre las sugerencias.
+export function MissionNew() {
+  const s = useStore();
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('manos');
+  const [minutes, setMinutes] = useState(15);
+  const [slot, setSlot] = useState('cualquiera');
+  const [note, setNote] = useState('');
+  const [saved, setSaved] = useState(null);
+  const [error, setError] = useState(null);
+  const mine = s.customMissions || [];
+
+  const save = (e) => {
+    e.preventDefault();
+    if (!title.trim()) { setError('Escribe qué vas a hacer, aunque sea en pocas palabras.'); return; }
+    const m = addCustomMission({ title, category, minutes, slot, note });
+    if (m) { setSaved(m); setTitle(''); setNote(''); setError(null); }
+  };
+
+  return (
+    <main className="screen">
+      <TopBar title="Tu misión" back="/mision" />
+      <section className="mission-card">
+        <h1 className="display">Propón una misión</h1>
+        <p className="lead">Algo que te apetezca hacer lejos de la pantalla. Te saldrá entre las sugerencias.</p>
+      </section>
+
+      {saved ? (
+        <section className="panel" aria-live="polite">
+          <p className="panel-title">Guardada: {saved.title}</p>
+          <p className="muted small">{CATEGORIES[saved.category].label} · {saved.minutes} min · {Math.round(saved.minutes * LIGHT_PER_MIN)} de luz al terminarla.</p>
+          <div className="row wrap">
+            <Button disabled={!!s.active} onClick={() => { startMission(saved.id); navigate('/mision/activa'); }}>Hacerla ahora</Button>
+            <Button variant="ghost" onClick={() => setSaved(null)}>Proponer otra</Button>
+          </div>
+          {s.active && <p className="muted small">Ya tienes una misión en curso. Esta te saldrá más adelante.</p>}
+        </section>
+      ) : (
+        <form className="panel form" onSubmit={save}>
+          <label className="field" htmlFor="mission-title">
+            <span className="toggle-label">¿Qué vas a hacer?</span>
+            <input id="mission-title" className="input" value={title} maxLength={70} placeholder="Ej.: Practicar guitarra" onChange={(e) => setTitle(e.target.value)} />
+          </label>
+          <div className="field">
+            <span className="toggle-label">Tipo</span>
+            <div className="chips">
+              {Object.entries(CATEGORIES).map(([id, c]) => <Chip key={id} selected={category === id} onClick={() => setCategory(id)}>{c.label}</Chip>)}
+            </div>
+            <span className="muted small">{CATEGORIES[category].hint}</span>
+          </div>
+          <div className="field">
+            <span className="toggle-label">Duración</span>
+            <div className="chips">
+              {MINUTE_OPTIONS.filter((n) => n <= CUSTOM_MAX_MINUTES).map((n) => <Chip key={n} selected={minutes === n} onClick={() => setMinutes(n)}>{n} min</Chip>)}
+            </div>
+          </div>
+          <div className="field">
+            <span className="toggle-label">¿Cuándo te va mejor?</span>
+            <div className="chips">
+              {SLOT_OPTIONS.map(([id, l]) => <Chip key={id} selected={slot === id} onClick={() => setSlot(id)}>{l}</Chip>)}
+            </div>
+          </div>
+          <label className="field" htmlFor="mission-note">
+            <span className="toggle-label">Una nota para ti <span className="muted small">(opcional)</span></span>
+            <input id="mission-note" className="input" value={note} maxLength={120} placeholder="Ej.: Aunque sean tres acordes" onChange={(e) => setNote(e.target.value)} />
+          </label>
+          {error && <p className="note small">{error}</p>}
+          <Button type="submit">Guardar misión</Button>
+        </form>
+      )}
+
+      {mine.length > 0 && (
+        <section className="panel">
+          <p className="panel-title">Tus misiones</p>
+          <ul className="mine-list">
+            {mine.map((m) => (
+              <li key={m.id}>
+                <span className="mine-text"><span>{m.title}</span><span className="muted small">{CATEGORIES[m.category].label} · {m.minutes} min</span></span>
+                <button type="button" className="link small" disabled={s.active?.missionId === m.id} onClick={() => removeCustomMission(m.id)} aria-label={`Quitar ${m.title}`}>Quitar</button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }

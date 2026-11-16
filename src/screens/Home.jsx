@@ -68,6 +68,7 @@ export default function Home() {
         ) : (
           <Button onClick={() => navigate('/mision')}>¿Qué misión toca ahora?</Button>
         )}
+        {!active && <button type="button" className="link small" onClick={() => navigate('/mision/nueva')}>Proponer una misión</button>}
         {!active && isPostponed() && <p className="muted small center">Pospuesta hasta las {formatHour(s.postponed.until)}. Si quieres otra, pídela.</p>}
 
         <nav className="home-nav" aria-label="Secciones">

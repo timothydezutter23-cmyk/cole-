@@ -34,8 +34,8 @@ export function Icon({ name, size = 20, className = '', label }) {
   );
 }
 
-export function Button({ children, variant = 'primary', className = '', ...props }) {
-  return <button type="button" className={`btn btn-${variant} ${className}`} {...props}>{children}</button>;
+export function Button({ children, variant = 'primary', className = '', type = 'button', ...props }) {
+  return <button type={type} className={`btn btn-${variant} ${className}`} {...props}>{children}</button>;
 }
 
 export function Chip({ selected, children, ...props }) {
