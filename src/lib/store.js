@@ -1,6 +1,6 @@
 // Estado de Offgrid. Vive entero en el dispositivo (localStorage), sin cuentas.
 import { useSyncExternalStore } from 'react';
-import { MISSIONS, MICRO_MISSIONS, CATEGORIES, missionById } from '../data/missions.js';
+import { MISSIONS, MICRO_MISSIONS, CATEGORIES, missionById as baseMissionById } from '../data/missions.js';
 import { SKINS, BOOSTS, itemById, skinById } from '../data/shop.js';
 import { DAY, dayKey, weekKey, weekStart, slotOf } from './time.js';
 import { heightAt } from './terrain.js';
@@ -40,6 +40,7 @@ function defaultState() {
     weekClaims: [],
     feats: {},
     cravings: [],
+    customMissions: [], // misiones propuestas por la persona
     lastResult: null,
   };
 }
@@ -163,13 +164,36 @@ export function featProgress(s = state) {
 
 // ---------- Motor de misiones ----------
 
+// Busca en el catálogo y en las misiones propias.
+export function missionById(id, s = state) {
+  return baseMissionById(id) || (s.customMissions || []).find((m) => m.id === id);
+}
+
+export const CUSTOM_MAX_MINUTES = 90;
+
+export function addCustomMission({ title, category, minutes, slot = 'cualquiera', note = '' }) {
+  const t = String(title || '').trim().slice(0, 70);
+  if (!t || !CATEGORIES[category]) return null;
+  const mins = Math.max(1, Math.min(CUSTOM_MAX_MINUTES, Math.round(Number(minutes) || 0)));
+  const m = { id: `p_${uid()}`, category, title: t, minutes: mins, slot, note: String(note || '').trim().slice(0, 120) || 'Una misión tuya.', custom: true, createdAt: Date.now() };
+  setState((s) => ({ customMissions: [...(s.customMissions || []), m] }));
+  return m;
+}
+
+export function removeCustomMission(id) {
+  setState((s) => ({
+    customMissions: (s.customMissions || []).filter((m) => m.id !== id),
+    suggestion: s.suggestion?.missionId === id ? null : s.suggestion,
+  }));
+}
+
 export function changesLeft(s = state) {
   return s.changes.day === dayKey() ? Math.max(0, MAX_CHANGES - s.changes.count) : MAX_CHANGES;
 }
 
 export function pickMission({ exclude = [], micro = false } = {}) {
   const s = state;
-  const pool = micro ? MICRO_MISSIONS : MISSIONS;
+  const pool = micro ? MICRO_MISSIONS : [...MISSIONS, ...(s.customMissions || [])];
   const slot = slotOf();
   const recent = s.history.slice(-14).map((h) => h.missionId);
   const lastCat = s.history.length ? s.history[s.history.length - 1].category : null;
@@ -181,6 +205,8 @@ export function pickMission({ exclude = [], micro = false } = {}) {
     let w = 1;
     if (m.slot === slot) w += 1;
     if (CATEGORIES[m.category].interests.some((i) => interests.includes(i))) w += 1.5;
+    // Las misiones propias salen con bastante más frecuencia.
+    if (m.custom) w += 6;
     if (m.category === lastCat) w *= 0.4;
     return [m, w];
   });
@@ -419,4 +445,4 @@ export function resetAll() {
   listeners.forEach((l) => l());
 }
 
-export { missionById, itemById, skinById };
+export { itemById, skinById };

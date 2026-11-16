@@ -4,7 +4,7 @@ import { useStore } from './lib/store.js';
 import { useDarkTheme, useReducedMotion } from './lib/prefs.js';
 import Onboarding from './screens/Onboarding.jsx';
 import Home from './screens/Home.jsx';
-import { MissionPick, MissionActive, MissionDone } from './screens/Mission.jsx';
+import { MissionPick, MissionActive, MissionDone, MissionNew } from './screens/Mission.jsx';
 import World from './screens/World.jsx';
 import Shop from './screens/Shop.jsx';
 import Week from './screens/Week.jsx';
@@ -17,6 +17,7 @@ const ROUTES = {
   '/mision': MissionPick,
   '/mision/activa': MissionActive,
   '/mision/hecha': MissionDone,
+  '/mision/nueva': MissionNew,
   '/mundo': World,
   '/tienda': Shop,
   '/semana': Week,
